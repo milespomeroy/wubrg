@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>WUBRG Deck Displayer</title>
+    <script>
+        let countdown = 0;
+
+        function parse(list) {
+            // get names and then call find
+            const parsed = [];
+            const lines = list.trim().split("\n");
+            for (let i = 0; i < lines.length; i++) {
+                const count = Number(lines[i].substr(0, 2).trim());
+                if (isNaN(count)) continue;
+                const name = lines[i].substring(2).trim();
+                parsed.push({"name": name, "count": count});
+            }
+            return parsed;
+        }
+
+        function done() {
+            if (--countdown === 0) {
+                loading(false);
+            }
+        }
+
+        function findCard(card) {
+            const request = new XMLHttpRequest();
+            request.open('GET', 'https://api.scryfall.com/cards/named?fuzzy=' + encodeURIComponent(card.name), true);
+
+            request.onload = function() {
+                if (request.status >= 200 && request.status < 400) {
+                    const data = JSON.parse(request.responseText);
+                    for (let i = 0; i < card.elements.length; i++) {
+                        card.elements[i].src = data["image_uris"]["normal"];
+                    }
+                } else {
+                    console.error(request.status + ': ' + request.responseText);
+                }
+                done();
+            };
+
+            request.onerror = function() {
+                console.error("connection error");
+                done();
+            };
+
+            request.send();
+        }
+
+        function populateDeck(cards) {
+            const deckSection = document.getElementById("deck");
+            // clear deck
+            while (deckSection.firstChild) {
+                deckSection.removeChild(deckSection.firstChild);
+            }
+
+            let timeout = 0;
+            countdown = cards.length;
+
+            for (let i = 0; i < cards.length; i++) {
+                const elements = [];
+                for (let j = 0; j < cards[i].count ; j++) {
+                    const element = document.createElement("img");
+                    deckSection.appendChild(element);
+                    elements.push(element);
+                }
+                cards[i].elements = elements;
+
+                setTimeout(function () {
+                    findCard(cards[i]);
+                }, timeout);
+
+                timeout = timeout + 100; // 100 millis delay between requests as required by API
+            }
+        }
+
+        function loading(show) {
+            document.getElementById("loader").hidden = !show;
+        }
+
+        function onSubmit(event) {
+            event.preventDefault();
+            loading(true);
+            const listText = document.getElementById("cards").value;
+            const cards = parse(listText);
+            populateDeck(cards);
+        }
+
+        function setup() {
+            loading(false);
+            const savedCards = localStorage.getItem("cards");
+            if (savedCards != null) {
+                document.getElementById("cards").value = savedCards;
+            }
+            document.getElementById("submit").addEventListener("click", onSubmit);
+        }
+
+        document.addEventListener("DOMContentLoaded", function() {
+            setup();
+        });
+
+        window.onbeforeunload = function() {
+            localStorage.setItem("cards", document.getElementById("cards").value);
+        }
+    </script>
+
+    <style>
+        img {
+            width: 300px;
+            padding: 10px;
+        }
+
+        textarea {
+            font-family: monospace;
+            font-size: 10pt;
+        }
+    </style>
+</head>
+<body>
+    <label for="cards">Card List</label><br>
+    <textarea name="cards" id="cards" cols="40" rows="10" placeholder="1 Opt"></textarea><br>
+    <input type="submit" id="submit">
+    <span id="loader">Loading...</span>
+
+    <section id = "deck">
+    </section>
+
+</body>
+</html>
